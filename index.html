@@ -17,6 +17,7 @@
         #map {
             width: 100%;
             height: 100vh;
+            background: #f5f5f5;
         }
 
         /* Simple tooltip styling for countries without data */
@@ -31,22 +32,17 @@
             display: none;
         }
 
-        /* Custom popup styling */
-        .leaflet-popup-content-wrapper {
-            background: white !important;
-            border-radius: 12px;
+        /* Cursor-following tooltip */
+        .cursor-tooltip {
+            position: fixed;
+            background: white;
+            border-radius: 8px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-            padding: 0;
-        }
-
-        .leaflet-popup-content {
-            margin: 16px !important;
-            min-width: 200px;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-        }
-
-        .leaflet-popup-tip {
-            background: white !important;
+            padding: 16px;
+            pointer-events: none;
+            z-index: 10000;
+            display: none;
+            max-width: 300px;
         }
 
         .country-info h3 {
@@ -74,15 +70,6 @@
             text-decoration: underline;
         }
 
-        /* Simple tooltip for countries without data */
-        .simple-tooltip {
-            background: rgba(0, 0, 0, 0.75);
-            color: white;
-            padding: 6px 10px;
-            border-radius: 6px;
-            font-size: 13px;
-            font-weight: 500;
-        }
 
         /* Remove the outline/bounding box on click */
         .leaflet-interactive:focus {
@@ -100,19 +87,27 @@
 </head>
 <body>
     <div id="map"></div>
+    <div class="cursor-tooltip" id="tooltip"></div>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
-        // Initialize the map centered on Europe
-        const map = L.map('map').setView([50, 10], 4);
+        // Initialize the map centered on Europe (no base tiles for clean look)
+        const map = L.map('map', {
+            zoomControl: true,
+            attributionControl: false,
+            minZoom: 2,
+            maxZoom: 6,
+            maxBounds: [
+                [-90, -180],  // Southwest coordinates
+                [90, 180]     // Northeast coordinates
+            ],
+            maxBoundsViscosity: 1.0  // Makes bounds "hard" - can't drag outside at all
+        }).setView([50, 10], 4);
 
-        // Add base tile layer (OpenStreetMap)
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            maxZoom: 18
-        }).addTo(map);
+        // Get tooltip element
+        const tooltip = document.getElementById('tooltip');
 
         // Country data with custom information
         // You can add more countries here with their info and links
@@ -144,93 +139,89 @@
         };
 
         // Style for country boundaries
+        function getInactiveStyle() {
+            return {
+                fillColor: '#D0D0D0',
+                weight: 1,
+                opacity: 1,
+                color: '#FFFFFF',
+                fillOpacity: 0.6
+            };
+        }
+
         function getDefaultStyle() {
             return {
-                fillColor: '#3388ff',
+                fillColor: '#4A90E2',
                 weight: 1,
-                opacity: 0.5,
-                color: '#666',
-                fillOpacity: 0.3
+                opacity: 1,
+                color: '#FFFFFF',
+                fillOpacity: 0.7
             };
         }
 
         function getHighlightStyle() {
             return {
-                fillColor: '#ff7800',
+                fillColor: '#FF6B6B',
                 weight: 2,
                 opacity: 1,
-                color: '#ff7800',
-                fillOpacity: 0.6
+                color: '#FFFFFF',
+                fillOpacity: 0.85
             };
         }
+
+        // Mouse move handler to follow cursor
+        document.addEventListener('mousemove', function(e) {
+            tooltip.style.left = (e.clientX + 15) + 'px';
+            tooltip.style.top = (e.clientY + 15) + 'px';
+        });
 
         // Load and display country boundaries
         fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson')
             .then(response => response.json())
             .then(data => {
                 L.geoJSON(data, {
-                    style: getDefaultStyle,
+                    style: function(feature) {
+                        const countryName = feature.properties.name;
+                        // Countries with data get blue, others get gray
+                        if (countryData[countryName]) {
+                            return getDefaultStyle();
+                        } else {
+                            return getInactiveStyle();
+                        }
+                    },
                     onEachFeature: function(feature, layer) {
                         const countryName = feature.properties.name;
-                        // Check if this country has custom data
+
+                        // Only add interactions to countries with data
                         if (countryData[countryName]) {
                             const info = countryData[countryName];
 
-                            // Create popup content with proper HTML
-                            const popupContent = `
-                                <div class="country-info">
-                                    <h3>${countryName}</h3>
-                                    <p>${info.description}</p>
-                                    <a href="${info.link}" target="_blank">Learn more →</a>
-                                </div>
-                            `;
-
-                            // Bind popup that appears on hover
-                            layer.bindPopup(popupContent, {
-                                closeButton: false,
-                                autoClose: true,
-                                closeOnClick: false,
-                                maxWidth: 300,
-                                minWidth: 200
-                            });
-
-                            // Hover events for highlighting and showing popup
+                            // Hover events for highlighting and showing tooltip
                             layer.on('mouseover', function(e) {
                                 layer.setStyle(getHighlightStyle());
-                                layer.openPopup(e.latlng);
+
+                                // Show cursor-following tooltip
+                                tooltip.innerHTML = `
+                                    <div class="country-info">
+                                        <h3>${countryName}</h3>
+                                        <p>${info.description}</p>
+                                        <a href="${info.link}" target="_blank">Learn more →</a>
+                                    </div>
+                                `;
+                                tooltip.style.display = 'block';
                             });
 
                             layer.on('mouseout', function() {
                                 layer.setStyle(getDefaultStyle());
-                                layer.closePopup();
+                                tooltip.style.display = 'none';
                             });
 
                             // Click to open link
-                           layer.on('click', function() {
-                               window.open(info.link, '_blank');
-                            });
-                        } else {
-                            // For countries without custom data, show simple tooltip
-                            layer.bindTooltip(`<div class="simple-tooltip">${countryName}</div>`, {
-                                permanent: false,
-                                direction: 'top',
-                                className: 'custom-tooltip'
-                            });
-
-                            layer.on('mouseover', function() {
-                                layer.setStyle({
-                                    fillColor: '#cccccc',
-                                    weight: 1,
-                                    opacity: 0.7,
-                                    color: '#999',
-                                    fillOpacity: 0.4
-                                });
-                            });
-
-                            layer.on('mouseout', function() {
-                                layer.setStyle(getDefaultStyle());
+                            layer.on('click', function() {
+                                window.open(info.link, '_blank');
                             });
                         }
+                        // Countries without data: no interactions at all
                     }
                 }).addTo(map);
             })
