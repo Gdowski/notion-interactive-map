@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Country Map</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+        #map {
+            width: 100%;
+            height: 100vh;
+        }
+
+        /* Simple tooltip styling for countries without data */
+        .leaflet-tooltip.custom-tooltip {
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            padding: 0;
+        }
+
+        .leaflet-tooltip.custom-tooltip:before {
+            display: none;
+        }
+
+        /* Custom popup styling */
+        .leaflet-popup-content-wrapper {
+            background: white !important;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            padding: 0;
+        }
+
+        .leaflet-popup-content {
+            margin: 16px !important;
+            min-width: 200px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+
+        .leaflet-popup-tip {
+            background: white !important;
+        }
+
+        .country-info h3 {
+            margin: 0 0 8px 0;
+            font-size: 18px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .country-info p {
+            margin: 0 0 12px 0;
+            font-size: 14px;
+            color: #666;
+            line-height: 1.5;
+        }
+
+        .country-info a {
+            color: #0066cc;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .country-info a:hover {
+            text-decoration: underline;
+        }
+
+        /* Simple tooltip for countries without data */
+        .simple-tooltip {
+            background: rgba(0, 0, 0, 0.75);
+            color: white;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        /* Remove the outline/bounding box on click */
+        .leaflet-interactive:focus {
+            outline: none !important;
+        }
+
+        path.leaflet-interactive:focus {
+            outline: none !important;
+        }
+
+        svg {
+            outline: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // Initialize the map
+        const map = L.map('map').setView([20, 0], 2);
+
+        // Add base tile layer (OpenStreetMap)
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 18
+        }).addTo(map);
+
+        // Country data with custom information
+        // You can add more countries here with their info and links
+        const countryData = {
+            'France': {
+                description: 'Explore French culture and cuisine',
+                link: 'https://example.com/france'
+            },
+            'Germany': {
+                description: 'Discover German engineering and history',
+                link: 'https://example.com/germany'
+            },
+            'Japan': {
+                description: 'Experience Japanese technology and traditions',
+                link: 'https://example.com/japan'
+            },
+            'United States of America': {
+                description: 'Learn about American innovation',
+                link: 'https://example.com/usa'
+            },
+            'Brazil': {
+                description: 'Explore Brazilian biodiversity',
+                link: 'https://example.com/brazil'
+            },
+            'Australia': {
+                description: 'Discover Australian wildlife',
+                link: 'https://example.com/australia'
+            }
+        };
+
+        // Style for country boundaries
+        function getDefaultStyle() {
+            return {
+                fillColor: '#3388ff',
+                weight: 1,
+                opacity: 0.5,
+                color: '#666',
+                fillOpacity: 0.3
+            };
+        }
+
+        function getHighlightStyle() {
+            return {
+                fillColor: '#ff7800',
+                weight: 2,
+                opacity: 1,
+                color: '#ff7800',
+                fillOpacity: 0.6
+            };
+        }
+
+        // Load and display country boundaries
+        fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson')
+            .then(response => response.json())
+            .then(data => {
+                L.geoJSON(data, {
+                    style: getDefaultStyle,
+                    onEachFeature: function(feature, layer) {
+                        const countryName = feature.properties.name;
+                        // Check if this country has custom data
+                        if (countryData[countryName]) {
+                            const info = countryData[countryName];
+
+                            // Create popup content with proper HTML
+                            const popupContent = `
+                                <div class="country-info">
+                                    <h3>${countryName}</h3>
+                                    <p>${info.description}</p>
+                                    <a href="${info.link}" target="_blank">Learn more →</a>
+                                </div>
+                            `;
+
+                            // Bind popup that appears on hover
+                            layer.bindPopup(popupContent, {
+                                closeButton: false,
+                                autoClose: true,
+                                closeOnClick: false,
+                                maxWidth: 300,
+                                minWidth: 200
+                            });
+
+                            // Hover events for highlighting and showing popup
+                            layer.on('mouseover', function(e) {
+                                layer.setStyle(getHighlightStyle());
+                                layer.openPopup(e.latlng);
+                            });
+
+                            layer.on('mouseout', function() {
+                                layer.setStyle(getDefaultStyle());
+                                layer.closePopup();
+                            });
+
+                            // Click to open link
+                           layer.on('click', function() {
+                               window.open(info.link, '_blank');
+                            });
+                        } else {
+                            // For countries without custom data, show simple tooltip
+                            layer.bindTooltip(`<div class="simple-tooltip">${countryName}</div>`, {
+                                permanent: false,
+                                direction: 'top',
+                                className: 'custom-tooltip'
+                            });
+
+                            layer.on('mouseover', function() {
+                                layer.setStyle({
+                                    fillColor: '#cccccc',
+                                    weight: 1,
+                                    opacity: 0.7,
+                                    color: '#999',
+                                    fillOpacity: 0.4
+                                });
+                            });
+
+                            layer.on('mouseout', function() {
+                                layer.setStyle(getDefaultStyle());
+                            });
+                        }
+                    }
+                }).addTo(map);
+            })
+            .catch(error => console.error('Error loading country data:', error));
+    </script>
+</body>
+</html>
